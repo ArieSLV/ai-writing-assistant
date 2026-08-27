@@ -1,16 +1,14 @@
-using System.Text;
+#pragma warning disable SKEXP0070
 
 namespace AiWritingAssistant;
 
-public class Program
+public static class Program
 {
     [STAThread]
-    static void Main()
+    public static void Main(string[] args)
     {
-        Console.WriteLine($"Thread Apartment State: {Thread.CurrentThread.GetApartmentState()}");
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Console.OutputEncoding = Encoding.UTF8;
-        Application.Run(new BackgroundApp());
+        Application.Run(new TrayApplicationContext());
     }
 }
