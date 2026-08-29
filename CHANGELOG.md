@@ -6,14 +6,6 @@ All notable changes to AI Writing Assistant are documented in this file. The pro
 
 ## [1.0.1] - 2026-08-29
 
-### Changed
-
-- Migrated the application, tests, proof tools, CI, and release builds to .NET 10.
-- Updated NuGet dependencies and the GitHub Actions checkout runtime.
-- Replaced the README Mermaid diagram with a mobile-friendly static SVG.
-
-## [1.0.0] - 2026-08-29
-
 ### Added
 
 - Global clipboard proofreading with Gemini or Ollama.
@@ -24,6 +16,11 @@ All notable changes to AI Writing Assistant are documented in this file. The pro
 - Local and remote audio cleanup on terminal paths.
 - Automated CI, dependency updates, and self-contained Windows releases.
 
+### Changed
+
+- Migrated the application, tests, proof tools, CI, and release builds to .NET 10.
+- Updated NuGet dependencies and the GitHub Actions checkout runtime.
+- Replaced the README Mermaid diagram with a mobile-friendly static SVG.
+
 [Unreleased]: https://github.com/ArieSLV/ai-writing-assistant/compare/v1.0.1...HEAD
-[1.0.1]: https://github.com/ArieSLV/ai-writing-assistant/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/ArieSLV/ai-writing-assistant/releases/tag/v1.0.0
+[1.0.1]: https://github.com/ArieSLV/ai-writing-assistant/releases/tag/v1.0.1
