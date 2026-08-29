@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
         <UseWindowsForms>true</UseWindowsForms>
         <ImplicitUsings>enable</ImplicitUsings>
-        <Version>1.0.0</Version>
+        <Version>1.0.1</Version>
         <Authors>Skuditsky Lev</Authors>
         <Description>Windows tray utility for proofreading, translation, and Gemini-powered voice dictation.</Description>
         <RepositoryUrl>https://github.com/ArieSLV/ai-writing-assistant</RepositoryUrl>
