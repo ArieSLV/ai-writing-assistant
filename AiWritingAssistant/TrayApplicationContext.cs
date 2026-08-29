@@ -215,7 +215,7 @@ public sealed class TrayApplicationContext : ApplicationContext
 
         _voiceDictationMenuItem.Click += (_, _) => _ = _voiceController.ToggleAsync();
 
-        var modelSettingsItem = new ToolStripMenuItem("Model Settings");
+        var modelSettingsItem = new ToolStripMenuItem(TrayMenuLayout.TextModelSettingsLabel);
 
         _geminiProviderMenuItem.Click += async (_, _) => await SetSelectedProviderAsync(LanguageModelProvider.Gemini);
         _ollamaProviderMenuItem.Click += async (_, _) => await SetSelectedProviderAsync(LanguageModelProvider.Ollama);
@@ -242,13 +242,20 @@ public sealed class TrayApplicationContext : ApplicationContext
         var exitItem = new ToolStripMenuItem("Exit");
         exitItem.Click += async (_, _) => await ExitApplicationAsync();
 
-        menu.Items.Add(proofreadItem);
-        menu.Items.Add(translateItem);
-        menu.Items.Add(_voiceDictationMenuItem);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(modelSettingsItem);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(exitItem);
+        foreach (var entry in TrayMenuLayout.RootEntries)
+        {
+            ToolStripItem item = entry switch
+            {
+                TrayMenuEntry.Proofread => proofreadItem,
+                TrayMenuEntry.Translate => translateItem,
+                TrayMenuEntry.TextModelSettings => modelSettingsItem,
+                TrayMenuEntry.Separator => new ToolStripSeparator(),
+                TrayMenuEntry.VoiceDictation => _voiceDictationMenuItem,
+                TrayMenuEntry.Exit => exitItem,
+                _ => throw new ArgumentOutOfRangeException(nameof(entry))
+            };
+            menu.Items.Add(item);
+        }
 
         return menu;
     }

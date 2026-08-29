@@ -12,6 +12,8 @@ Windows tray application for proofreading, translation, and voice dictation. Tex
 
 Voice Dictation shows a movable English waveform window only while the microphone is recording. Press `Ctrl+Shift+G` again to stop. The window disappears immediately; upload, transcription, success, and failure are then shown through the tray icon and tooltip. A successful transcript replaces the clipboard contents.
 
+The tray menu groups `Proofread`, `Translate`, and `Text Model Settings` together. Voice Dictation is a separate block because it always uses Google Transcribe and its separate Voice credential/model configuration.
+
 ## Credentials
 
 Set credentials outside the repository:
