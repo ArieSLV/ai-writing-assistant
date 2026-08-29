@@ -6,6 +6,10 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
 using System.Text;
+using AiWritingAssistant.Audio;
+using AiWritingAssistant.Credentials;
+using AiWritingAssistant.Transcription;
+using AiWritingAssistant.UI;
 using Microsoft.SemanticKernel.ChatCompletion;
 using OllamaSharp;
 using OllamaSharp.Models;
@@ -50,7 +54,7 @@ public sealed class HotKeyMessageWindow : NativeWindow, IDisposable
 [Experimental("SKEXP0070")]
 public sealed class TrayApplicationContext : ApplicationContext
 {
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
 
     [DllImport("user32.dll")]
@@ -61,9 +65,11 @@ public sealed class TrayApplicationContext : ApplicationContext
 
     private const int HotkeyIdProofread = 1;
     private const int HotkeyIdTranslate = 2;
+    private const int HotkeyIdVoice = 3;
     private const uint ModControlShift = 0x6;
     private const uint VkD = 0x44;
     private const uint VkF = 0x46;
+    private const uint VkG = 0x47;
     private const int MaxAttempts = 5;
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan CompletionStateDuration = TimeSpan.FromSeconds(2.5);
@@ -76,9 +82,12 @@ public sealed class TrayApplicationContext : ApplicationContext
     private readonly AppSettingsStore _settingsStore;
     private readonly LanguageModelServiceFactory _serviceFactory;
     private readonly AppSettings _settings;
+    private readonly ApplicationOperationCoordinator _operationCoordinator;
+    private readonly VoiceDictationController _voiceController;
 
     private readonly ToolStripMenuItem _geminiProviderMenuItem;
     private readonly ToolStripMenuItem _ollamaProviderMenuItem;
+    private readonly ToolStripMenuItem _voiceDictationMenuItem;
     private readonly ToolStripTextBox _geminiModelTextBox;
     private readonly ToolStripTextBox _ollamaBaseUrlTextBox;
     private readonly ToolStripMenuItem _ollamaReasoningMenuItem;
@@ -88,8 +97,8 @@ public sealed class TrayApplicationContext : ApplicationContext
     private IReadOnlyList<string> _ollamaModelNames = Array.Empty<string>();
     private string? _ollamaModelLoadError;
     private bool _hasLoadedOllamaModels;
-    private bool _isProcessing;
     private bool _isRefreshingOllamaModels;
+    private bool _voiceHotkeyRegistered;
     private int _ollamaRefreshVersion;
     private CancellationTokenSource? _statusResetCancellation;
 
@@ -100,11 +109,14 @@ public sealed class TrayApplicationContext : ApplicationContext
         Retrying,
         Succeeded,
         Failed,
+        Cancelled,
     }
 
     public TrayApplicationContext()
     {
-        _serviceFactory = new LanguageModelServiceFactory();
+        var credentialProvider = new GoogleCredentialProvider();
+        _serviceFactory = new LanguageModelServiceFactory(credentialProvider);
+        _operationCoordinator = new ApplicationOperationCoordinator();
         _logger = new AppLogger(Path.Combine(AppContext.BaseDirectory, "AiWritingAssistant.log"));
         _settingsStore = new AppSettingsStore(Path.Combine(AppContext.BaseDirectory, "AiWritingAssistant.settings.json"), _logger);
         _settings = _settingsStore.Load();
@@ -124,6 +136,27 @@ public sealed class TrayApplicationContext : ApplicationContext
         };
         _refreshOllamaModelsMenuItem = new ToolStripMenuItem("Refresh Ollama Models");
         _ollamaModelsMenuItem = new ToolStripMenuItem("Ollama Models");
+        _voiceDictationMenuItem = new ToolStripMenuItem("Start Voice Dictation");
+
+        var levels = new AudioLevelBuffer();
+        var recordingStore = new TemporaryRecordingStore();
+        var overlay = new RecordingOverlayForm(
+            levels,
+            TimeSpan.FromSeconds(_settings.VoiceMaxRecordingSeconds));
+        _voiceController = new VoiceDictationController(
+            _operationCoordinator,
+            credentialProvider,
+            new AudioRecordingService(),
+            new AudioFileNormalizer(),
+            new GeminiTranscriptionClient(credentialProvider, _logger),
+            new ClipboardService(),
+            recordingStore,
+            levels,
+            overlay,
+            _settings,
+            _logger);
+        _voiceController.StateChanged += OnVoiceStateChanged;
+        _voiceController.OutcomeReported += OnVoiceOutcomeReported;
 
         _trayIcon = new NotifyIcon
         {
@@ -139,16 +172,29 @@ public sealed class TrayApplicationContext : ApplicationContext
             switch (e.HotKeyId)
             {
                 case HotkeyIdProofread:
-                    _ = PerformClipboardActionAsync("Proofread Clipboard Text", BuildProofreadPrompt);
+                    _ = PerformClipboardActionAsync(ApplicationOperation.Proofread, "Proofread Clipboard Text", BuildProofreadPrompt);
                     break;
                 case HotkeyIdTranslate:
-                    _ = PerformClipboardActionAsync("Translate Clipboard Text to English", BuildTranslatePrompt);
+                    _ = PerformClipboardActionAsync(ApplicationOperation.Translate, "Translate Clipboard Text to English", BuildTranslatePrompt);
+                    break;
+                case HotkeyIdVoice:
+                    _ = _voiceController.ToggleAsync();
                     break;
             }
         };
 
-        RegisterHotKey(_hotKeyWindow.Handle, HotkeyIdProofread, ModControlShift, VkD);
-        RegisterHotKey(_hotKeyWindow.Handle, HotkeyIdTranslate, ModControlShift, VkF);
+        if (!RegisterHotKey(_hotKeyWindow.Handle, HotkeyIdProofread, ModControlShift, VkD))
+            _logger.Warning("Ctrl+Shift+D could not be registered for Proofread.");
+        if (!RegisterHotKey(_hotKeyWindow.Handle, HotkeyIdTranslate, ModControlShift, VkF))
+            _logger.Warning("Ctrl+Shift+F could not be registered for Translate.");
+
+        _voiceHotkeyRegistered = RegisterHotKey(_hotKeyWindow.Handle, HotkeyIdVoice, ModControlShift, VkG);
+        if (!_voiceHotkeyRegistered)
+        {
+            var error = Marshal.GetLastWin32Error();
+            _voiceDictationMenuItem.Text = "Start Voice Dictation (hotkey unavailable)";
+            _logger.Warning($"Ctrl+Shift+G could not be registered for Voice Dictation. Win32Error={error}.");
+        }
 
         UpdateSettingsUi();
         SetTrayState(TrayIconState.Idle);
@@ -162,10 +208,12 @@ public sealed class TrayApplicationContext : ApplicationContext
         var menu = new ContextMenuStrip();
 
         var proofreadItem = new ToolStripMenuItem("Proofread Clipboard Text");
-        proofreadItem.Click += (_, _) => _ = PerformClipboardActionAsync("Proofread Clipboard Text", BuildProofreadPrompt);
+        proofreadItem.Click += (_, _) => _ = PerformClipboardActionAsync(ApplicationOperation.Proofread, "Proofread Clipboard Text", BuildProofreadPrompt);
 
         var translateItem = new ToolStripMenuItem("Translate Clipboard Text to English");
-        translateItem.Click += (_, _) => _ = PerformClipboardActionAsync("Translate Clipboard Text to English", BuildTranslatePrompt);
+        translateItem.Click += (_, _) => _ = PerformClipboardActionAsync(ApplicationOperation.Translate, "Translate Clipboard Text to English", BuildTranslatePrompt);
+
+        _voiceDictationMenuItem.Click += (_, _) => _ = _voiceController.ToggleAsync();
 
         var modelSettingsItem = new ToolStripMenuItem("Model Settings");
 
@@ -192,10 +240,11 @@ public sealed class TrayApplicationContext : ApplicationContext
         modelSettingsItem.DropDownItems.Add(_ollamaModelsMenuItem);
 
         var exitItem = new ToolStripMenuItem("Exit");
-        exitItem.Click += (_, _) => ExitApplication();
+        exitItem.Click += async (_, _) => await ExitApplicationAsync();
 
         menu.Items.Add(proofreadItem);
         menu.Items.Add(translateItem);
+        menu.Items.Add(_voiceDictationMenuItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(modelSettingsItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -431,12 +480,16 @@ public sealed class TrayApplicationContext : ApplicationContext
         return value.Length <= maxLength ? value : $"{value[..(maxLength - 3)]}...";
     }
 
-    private async Task PerformClipboardActionAsync(string operationName, Func<string, string> promptFactory)
+    private async Task PerformClipboardActionAsync(
+        ApplicationOperation operation,
+        string operationName,
+        Func<string, string> promptFactory)
     {
-        if (_isProcessing)
+        if (!_operationCoordinator.TryAcquire(operation, out var lease))
+        {
+            _logger.Info($"'{operationName}' ignored because another operation is active.");
             return;
-
-        _isProcessing = true;
+        }
         CancelPendingStatusReset();
         SetTrayState(TrayIconState.Processing);
 
@@ -463,7 +516,7 @@ public sealed class TrayApplicationContext : ApplicationContext
         }
         finally
         {
-            _isProcessing = false;
+            lease!.Dispose();
         }
 
         if (!succeeded)
@@ -571,33 +624,47 @@ public sealed class TrayApplicationContext : ApplicationContext
                message.Contains("bad request", StringComparison.OrdinalIgnoreCase);
     }
 
-    private async Task FlashCompletionStateAsync(TrayIconState state)
+    private async Task FlashCompletionStateAsync(TrayIconState state, string? statusText = null)
     {
         CancelPendingStatusReset();
 
         var cancellation = new CancellationTokenSource();
         _statusResetCancellation = cancellation;
 
+        if (!string.IsNullOrWhiteSpace(statusText))
+            _trayIcon.Text = statusText;
+
         SetTrayState(state);
 
         try
         {
             await Task.Delay(CompletionStateDuration, cancellation.Token);
+
+            if (!cancellation.IsCancellationRequested &&
+                _operationCoordinator.State == ApplicationOperationState.Idle)
+            {
+                _trayIcon.Text = "AI Writing Assistant";
+                SetTrayState(TrayIconState.Idle);
+            }
         }
         catch (TaskCanceledException)
         {
-            return;
+            // A newer operation owns the tray presentation.
         }
+        finally
+        {
+            if (ReferenceEquals(_statusResetCancellation, cancellation))
+                _statusResetCancellation = null;
 
-        if (!cancellation.IsCancellationRequested && !_isProcessing)
-            SetTrayState(TrayIconState.Idle);
+            cancellation.Dispose();
+        }
     }
 
     private void CancelPendingStatusReset()
     {
-        _statusResetCancellation?.Cancel();
-        _statusResetCancellation?.Dispose();
+        var cancellation = _statusResetCancellation;
         _statusResetCancellation = null;
+        cancellation?.Cancel();
     }
 
     private void SetTrayState(TrayIconState state, int currentAttempt = 0, int maxAttempts = 0)
@@ -609,6 +676,7 @@ public sealed class TrayApplicationContext : ApplicationContext
             TrayIconState.Retrying => GetOrCreateIcon($"retry-{currentAttempt}-{maxAttempts}", () => CreateRetryIcon(currentAttempt, maxAttempts)),
             TrayIconState.Succeeded => GetOrCreateIcon("succeeded", () => CreateCompletionIcon(isSuccess: true)),
             TrayIconState.Failed => GetOrCreateIcon("failed", () => CreateCompletionIcon(isSuccess: false)),
+            TrayIconState.Cancelled => GetOrCreateIcon("cancelled", CreateCancelledIcon),
             _ => _originalIcon,
         };
     }
@@ -692,6 +760,25 @@ public sealed class TrayApplicationContext : ApplicationContext
         });
     }
 
+    private Icon CreateCancelledIcon()
+    {
+        return CreateOverlayIcon(g =>
+        {
+            using var badgeBrush = new SolidBrush(Color.FromArgb(230, 107, 114, 128));
+            using var badgePen = new Pen(Color.White, 2f);
+            using var symbolPen = new Pen(Color.White, 3f)
+            {
+                StartCap = LineCap.Round,
+                EndCap = LineCap.Round,
+            };
+
+            var badgeBounds = CreateCircleBounds(32, 20);
+            g.FillEllipse(badgeBrush, badgeBounds);
+            g.DrawEllipse(badgePen, badgeBounds);
+            g.DrawLine(symbolPen, 11f, 16f, 21f, 16f);
+        });
+    }
+
     private Icon CreateOverlayIcon(Action<Graphics> drawOverlay)
     {
         const int size = 32;
@@ -735,6 +822,54 @@ public sealed class TrayApplicationContext : ApplicationContext
         path.CloseFigure();
 
         return path;
+    }
+
+    private void OnVoiceStateChanged(object? sender, VoiceDictationStateChangedEventArgs eventArgs)
+    {
+        if (eventArgs.State == VoiceDictationState.Disposed)
+        {
+            _voiceDictationMenuItem.Enabled = false;
+            return;
+        }
+
+        if (eventArgs.State == VoiceDictationState.Starting)
+            CancelPendingStatusReset();
+
+        var presentation = VoiceTrayPresentationMapper.ForState(eventArgs.State);
+        _voiceDictationMenuItem.Text = eventArgs.State == VoiceDictationState.Idle && !_voiceHotkeyRegistered
+            ? "Start Voice Dictation (hotkey unavailable)"
+            : presentation.MenuText;
+
+        if (eventArgs.State == VoiceDictationState.Idle && _statusResetCancellation is not null)
+            return;
+
+        _trayIcon.Text = presentation.Tooltip;
+        SetTrayState(ToTrayIconState(presentation.IconState));
+    }
+
+    private void OnVoiceOutcomeReported(object? sender, VoiceDictationOutcomeEventArgs eventArgs)
+    {
+        var presentation = VoiceTrayPresentationMapper.ForOutcome(
+            eventArgs.Outcome,
+            eventArgs.UserMessage);
+        _voiceDictationMenuItem.Text = _voiceHotkeyRegistered
+            ? presentation.MenuText
+            : "Start Voice Dictation (hotkey unavailable)";
+        _ = FlashCompletionStateAsync(
+            ToTrayIconState(presentation.IconState),
+            presentation.Tooltip);
+    }
+
+    private static TrayIconState ToTrayIconState(VoiceTrayIconState state)
+    {
+        return state switch
+        {
+            VoiceTrayIconState.Processing => TrayIconState.Processing,
+            VoiceTrayIconState.Succeeded => TrayIconState.Succeeded,
+            VoiceTrayIconState.Failed => TrayIconState.Failed,
+            VoiceTrayIconState.Cancelled => TrayIconState.Cancelled,
+            _ => TrayIconState.Idle
+        };
     }
 
     private void TrySaveSettings()
@@ -892,14 +1027,22 @@ public sealed class TrayApplicationContext : ApplicationContext
                 """;
     }
 
-    private void ExitApplication()
+    private async Task ExitApplicationAsync()
     {
         CancelPendingStatusReset();
         _logger.Info("Application shutdown requested.");
 
+        _operationCoordinator.BeginShutdown();
         UnregisterHotKey(_hotKeyWindow.Handle, HotkeyIdProofread);
         UnregisterHotKey(_hotKeyWindow.Handle, HotkeyIdTranslate);
+        if (_voiceHotkeyRegistered)
+            UnregisterHotKey(_hotKeyWindow.Handle, HotkeyIdVoice);
         _hotKeyWindow.Dispose();
+
+        _voiceController.StateChanged -= OnVoiceStateChanged;
+        _voiceController.OutcomeReported -= OnVoiceOutcomeReported;
+        await _voiceController.DisposeAsync();
+        _operationCoordinator.Dispose();
 
         _trayIcon.Visible = false;
         _trayIcon.Dispose();

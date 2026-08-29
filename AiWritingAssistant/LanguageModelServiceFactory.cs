@@ -1,5 +1,6 @@
 #pragma warning disable SKEXP0070
 
+using AiWritingAssistant.Credentials;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.Google;
@@ -9,7 +10,18 @@ namespace AiWritingAssistant;
 
 internal sealed class LanguageModelServiceFactory
 {
-    private const string GoogleApiKeyEnvironmentVariable = "AI_WRITING_ASSISTANT_GOOGLE_API_KEY";
+    private readonly IGoogleCredentialProvider _credentialProvider;
+
+    public LanguageModelServiceFactory()
+        : this(new GoogleCredentialProvider())
+    {
+    }
+
+    internal LanguageModelServiceFactory(IGoogleCredentialProvider credentialProvider)
+    {
+        _credentialProvider = credentialProvider ??
+                              throw new ArgumentNullException(nameof(credentialProvider));
+    }
 
     public IChatCompletionService CreateGeminiChatCompletionService(AppSettings settings)
     {
@@ -37,17 +49,13 @@ internal sealed class LanguageModelServiceFactory
         return new OllamaApiClient(CreateOllamaUri(baseUrl), modelId ?? string.Empty);
     }
 
-    private static IChatCompletionService CreateGeminiService(AppSettings settings)
+    private IChatCompletionService CreateGeminiService(AppSettings settings)
     {
         if (string.IsNullOrWhiteSpace(settings.GeminiModel))
             throw new InvalidOperationException("Set a Gemini model name before using the Gemini provider.");
 
-        var apiKey = Environment.GetEnvironmentVariable(GoogleApiKeyEnvironmentVariable)?.Trim();
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            throw new InvalidOperationException(
-                $"Set the {GoogleApiKeyEnvironmentVariable} environment variable before using the Gemini provider.");
-        }
+        var apiKey = _credentialProvider.GetRequiredCredential(
+            GoogleCredentialPurpose.TextGeneration);
 
         return new GoogleAIGeminiChatCompletionService(
             settings.GeminiModel,

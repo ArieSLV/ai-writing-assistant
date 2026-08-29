@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+*.user
+*.lscache
+*.DotSettings.user
+
+# Proof artifacts are scripts/source only; recordings and returned text stay outside the repository.
+*.wav
