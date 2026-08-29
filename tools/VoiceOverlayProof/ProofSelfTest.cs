@@ -598,7 +598,7 @@ internal static class ProofSelfTest
             var format = WaveFormat.CreateIeeeFloatWaveFormat(48_000, 2);
             var frameCount = (int)Math.Round(format.SampleRate * duration.TotalSeconds);
             var audio = new byte[frameCount * format.BlockAlign];
-            var samples = MemoryMarshal.Cast<byte, float>(audio);
+            var samples = MemoryMarshal.Cast<byte, float>(audio.AsSpan());
             for (var index = 0; index < samples.Length; index++)
             {
                 samples[index] = peak == 0.0f
@@ -614,7 +614,7 @@ internal static class ProofSelfTest
             var format = new WaveFormat(44_100, 16, 1);
             var sampleCount = (int)Math.Round(format.SampleRate * duration.TotalSeconds);
             var audio = new byte[sampleCount * sizeof(short)];
-            var samples = MemoryMarshal.Cast<byte, short>(audio);
+            var samples = MemoryMarshal.Cast<byte, short>(audio.AsSpan());
             for (var index = 0; index < samples.Length; index++)
             {
                 samples[index] = (short)(short.MaxValue * peak *
