@@ -10,7 +10,7 @@ Thank you for helping improve AI Writing Assistant. Small, focused changes with 
 
 ## Development setup
 
-Development requires Windows and the .NET 9 SDK.
+Development requires Windows and the .NET 10 SDK.
 
 ~~~powershell
 git clone https://github.com/ArieSLV/ai-writing-assistant.git

@@ -6,7 +6,7 @@
   [![CI](https://github.com/ArieSLV/ai-writing-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/ArieSLV/ai-writing-assistant/actions/workflows/ci.yml)
   [![Latest release](https://img.shields.io/github/v/release/ArieSLV/ai-writing-assistant?display_name=tag&sort=semver)](https://github.com/ArieSLV/ai-writing-assistant/releases/latest)
   [![Windows](https://img.shields.io/badge/platform-Windows-0078D4?logo=windows11&logoColor=white)](https://github.com/ArieSLV/ai-writing-assistant/releases/latest)
-  [![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+  [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
   [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 </div>
 
@@ -98,7 +98,7 @@ Do not put API keys in the settings file.
 Requirements:
 
 - Windows 10 or later;
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0);
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0);
 - optional Ollama installation for local text actions.
 
 ~~~powershell
