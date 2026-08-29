@@ -71,16 +71,7 @@ Install and start [Ollama](https://ollama.com/), then open **Text Model Settings
 
 ## How voice dictation works
 
-```mermaid
-flowchart LR
-    A[Ctrl+Shift+G] --> B[Record WAV]
-    B --> C[Normalize audio]
-    C --> D[Upload to Gemini]
-    D --> E[Smart transcription]
-    E --> F[Replace clipboard]
-    E --> G[Delete remote file]
-    F --> H[Delete local recording]
-```
+![Voice dictation flow from recording through Gemini transcription and clipboard replacement, including temporary-file cleanup](docs/assets/voice-dictation-flow.svg)
 
 Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> once to start and again to stop. The recording overlay disappears immediately after stopping; upload, processing, success, and failure are represented by the tray icon and tooltip.
 
