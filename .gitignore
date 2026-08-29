@@ -3,6 +3,26 @@
 *.user
 *.lscache
 *.DotSettings.user
+.vs/
+.idea/
+TestResults/
+artifacts/
+
+# Runtime files written next to the executable.
+AiWritingAssistant.log
+AiWritingAssistant.log.previous
+AiWritingAssistant.settings.json
+
+# Local credentials and signing material.
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.pem
+*.key
 
 # Proof artifacts are scripts/source only; recordings and returned text stay outside the repository.
 *.wav
+*.mp3
+*.m4a

@@ -1,53 +1,135 @@
-# AI Writing Assistant
+<div align="center">
+  <img src="docs/assets/hero.svg" alt="AI Writing Assistant — proofread, translate, and dictate from anywhere in Windows" width="100%" />
 
-Windows tray application for proofreading, translation, and voice dictation. Text actions and voice transcription use separate Google API credentials so they can be billed and managed independently.
+  <p>A lightweight Windows tray utility that turns global hotkeys into polished clipboard text.</p>
 
-## Hotkeys
+  [![CI](https://github.com/ArieSLV/ai-writing-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/ArieSLV/ai-writing-assistant/actions/workflows/ci.yml)
+  [![Latest release](https://img.shields.io/github/v/release/ArieSLV/ai-writing-assistant?display_name=tag&sort=semver)](https://github.com/ArieSLV/ai-writing-assistant/releases/latest)
+  [![Windows](https://img.shields.io/badge/platform-Windows-0078D4?logo=windows11&logoColor=white)](https://github.com/ArieSLV/ai-writing-assistant/releases/latest)
+  [![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+  [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+</div>
 
-| Hotkey | Action |
-|---|---|
-| `Ctrl+Shift+D` | Proofread clipboard text |
-| `Ctrl+Shift+F` | Translate clipboard text to English |
-| `Ctrl+Shift+G` | Start or stop Voice Dictation |
+## Why this exists
 
-Voice Dictation shows a movable English waveform window only while the microphone is recording. Press `Ctrl+Shift+G` again to stop. The window disappears immediately; upload, transcription, success, and failure are then shown through the tray icon and tooltip. A successful transcript replaces the clipboard contents.
+AI Writing Assistant keeps three frequent writing actions one shortcut away. It reads text from the clipboard, or records speech through the default microphone, sends only the requested input to the configured provider, and places the finished text back on the clipboard.
 
-The tray menu groups `Proofread`, `Translate`, and `Text Model Settings` together. Voice Dictation is a separate block because it always uses Google Transcribe and its separate Voice credential/model configuration.
+No editor integration is required. It works from any Windows application that can copy and paste.
 
-## Credentials
+## Features
 
-Set credentials outside the repository:
+| Shortcut | Action | Provider | Result |
+|---|---|---|---|
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> | Proofread English text | Gemini or local Ollama | Replaces clipboard text |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | Translate clipboard text to English | Gemini or local Ollama | Replaces clipboard text |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> | Start or stop voice dictation | Google Gemini Transcribe | Places transcript on clipboard |
 
-- `AI_WRITING_ASSISTANT_GOOGLE_API_KEY` — Proofread and Translate;
-- `AI_WRITING_ASSISTANT_GOOGLE_VOICE_API_KEY` — Voice Dictation only.
+- Movable recording overlay with a live waveform and elapsed time.
+- Tray-only progress after recording stops, so transcription never covers your work.
+- Separate Google credentials for text and voice billing.
+- Local Ollama option for proofreading and translation.
+- Retry, timeout, cancellation, cleanup, and clipboard-preservation behavior.
+- English-only UI with no installer or background service.
 
-Voice never falls back to the Text key, and Text actions never use the Voice key. Restart the application after changing a user-level environment variable.
+## Install
 
-## Voice behavior and privacy
+1. Download the Windows archive from the [latest release](https://github.com/ArieSLV/ai-writing-assistant/releases/latest).
+2. Extract it to a permanent folder.
+3. Configure the credentials you intend to use.
+4. Run <code>AiWritingAssistant.exe</code>.
 
-- Uses the Windows default recording device.
-- Stops and transcribes automatically after at most 10 minutes.
-- Normalizes captured audio to a WAV accepted by Gemini Transcribe.
-- Attempts to delete both the local temporary recording and the uploaded Google file on every terminal path.
-- Does not write API keys, transcript text, raw API responses, or audio content to application logs.
-- Preserves the existing clipboard when recording is cancelled or transcription fails.
+The application is currently unsigned, so Windows SmartScreen may ask you to confirm the first launch. The release archive includes a SHA-256 checksum for integrity verification.
 
-Google API usage is billable to the project associated with the Voice key. An empty balance, exhausted quota, or invalid credential is reported as a failed Voice action in the tray.
+### Configure Google credentials
 
-## Configuration
-
-`AiWritingAssistant.settings.json` next to the installed executable stores non-secret settings such as provider/model selection. The default voice model is `gemini-3.5-transcribe`. API keys must remain in environment variables and must not be added to this file.
-
-## Build and test
+Run the following in PowerShell, replacing the placeholders with your own keys:
 
 ~~~powershell
-dotnet test AiWritingAssistant.Tests\AiWritingAssistant.Tests.csproj -c Release
-dotnet publish AiWritingAssistant\AiWritingAssistant.csproj -c Release -o <publish-directory>
+[Environment]::SetEnvironmentVariable(
+    "AI_WRITING_ASSISTANT_GOOGLE_API_KEY",
+    "<text-actions-key>",
+    "User")
+
+[Environment]::SetEnvironmentVariable(
+    "AI_WRITING_ASSISTANT_GOOGLE_VOICE_API_KEY",
+    "<voice-transcription-key>",
+    "User")
 ~~~
 
-## Troubleshooting
+Restart the application after changing a user-level environment variable.
 
-- If a hotkey does nothing, exit another running copy of the application and restart this one; global hotkeys can be owned by only one process.
-- If Voice Dictation reports that its key is missing, verify `AI_WRITING_ASSISTANT_GOOGLE_VOICE_API_KEY` at the user or process level and restart.
-- If transcription reports quota or rate-limit failure, verify the balance and quota of the personal Google project used by the Voice key.
-- If recording cannot start, verify that Windows has a default input device and permits desktop microphone access.
+| Variable | Used for | Required when |
+|---|---|---|
+| <code>AI_WRITING_ASSISTANT_GOOGLE_API_KEY</code> | Proofread and Translate | Text provider is Gemini |
+| <code>AI_WRITING_ASSISTANT_GOOGLE_VOICE_API_KEY</code> | Voice Dictation only | Voice Dictation is used |
+
+Voice never falls back to the text key, and text actions never use the voice key.
+
+### Use Ollama for text actions
+
+Install and start [Ollama](https://ollama.com/), then open **Text Model Settings** from the tray menu. Select **Ollama**, confirm the server URL, refresh the model list, and choose a model. Voice Dictation always uses Google Gemini Transcribe.
+
+## How voice dictation works
+
+```mermaid
+flowchart LR
+    A[Ctrl+Shift+G] --> B[Record WAV]
+    B --> C[Normalize audio]
+    C --> D[Upload to Gemini]
+    D --> E[Smart transcription]
+    E --> F[Replace clipboard]
+    E --> G[Delete remote file]
+    F --> H[Delete local recording]
+```
+
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd> once to start and again to stop. The recording overlay disappears immediately after stopping; upload, processing, success, and failure are represented by the tray icon and tooltip.
+
+## Privacy and data handling
+
+- API keys are read from environment variables and are never stored in repository or settings files.
+- Temporary recordings are created outside the repository.
+- The application attempts to delete the local recording and the uploaded Google file on every terminal path.
+- Logs do not intentionally contain keys, transcript text, API response bodies, or audio content.
+- The existing clipboard remains unchanged when recording is cancelled or transcription fails.
+- Google API usage and retention remain subject to the Google project and service terms associated with your key.
+
+## Settings and logs
+
+The executable directory contains two runtime files after use:
+
+- <code>AiWritingAssistant.settings.json</code> — non-secret provider and model settings;
+- <code>AiWritingAssistant.log</code> — bounded diagnostic log with one rotated backup.
+
+Do not put API keys in the settings file.
+
+## Build from source
+
+Requirements:
+
+- Windows 10 or later;
+- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0);
+- optional Ollama installation for local text actions.
+
+~~~powershell
+git clone https://github.com/ArieSLV/ai-writing-assistant.git
+cd ai-writing-assistant
+dotnet restore AiWritingAssistant.sln
+dotnet test AiWritingAssistant.sln -c Release --no-restore
+dotnet run --project AiWritingAssistant\AiWritingAssistant.csproj -c Release
+~~~
+
+Create a self-contained Windows package:
+
+~~~powershell
+dotnet publish AiWritingAssistant\AiWritingAssistant.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+~~~
+
+## Contributing and security
+
+Bug reports and focused improvements are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. For vulnerabilities, follow [SECURITY.md](SECURITY.md) and do not create a public issue.
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
+## License
+
+Released under the [MIT License](LICENSE).

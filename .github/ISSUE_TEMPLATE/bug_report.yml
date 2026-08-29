@@ -1,0 +1,83 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve AI Writing Assistant. Never paste API keys, private clipboard content, transcripts, or unredacted logs.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release tag or commit hash
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+  - type: dropdown
+    id: action
+    attributes:
+      label: Affected action
+      options:
+        - Proofread
+        - Translate
+        - Voice Dictation
+        - Tray/settings
+        - Startup/shutdown
+        - Build or packaging
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - Gemini
+        - Ollama
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Copy sanitized text...
+        2. Press the shortcut...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Remove keys, clipboard text, transcripts, audio, usernames, and private paths.
+      render: text
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials and private content from this report.
+          required: true

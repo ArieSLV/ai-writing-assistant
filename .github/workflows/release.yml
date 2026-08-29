@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release, for example v1.0.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build Windows release
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Resolve tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            "${{ inputs.tag }}"
+          } else {
+            "${{ github.ref_name }}"
+          }
+
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "Release tag '$tag' is not a semantic version."
+          }
+
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.version.outputs.tag }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+
+      - name: Restore
+        run: dotnet restore AiWritingAssistant.sln --runtime win-x64
+
+      - name: Test
+        run: dotnet test AiWritingAssistant.sln --configuration Release --no-restore
+
+      - name: Publish self-contained application
+        run: dotnet publish AiWritingAssistant/AiWritingAssistant.csproj --configuration Release --runtime win-x64 --self-contained true --no-restore -p:DebugType=None -p:DebugSymbols=false --output artifacts/publish
+
+      - name: Package and checksum
+        id: package
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $archive = "AI-Writing-Assistant-$tag-win-x64.zip"
+          $archivePath = Join-Path "artifacts" $archive
+          Compress-Archive -Path "artifacts/publish/*" -DestinationPath $archivePath -CompressionLevel Optimal
+
+          $checksumPath = "$archivePath.sha256"
+          $hash = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $archive" | Set-Content -Path $checksumPath -NoNewline
+
+          "archive=$archivePath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "checksum=$checksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release create "${{ steps.version.outputs.tag }}" "${{ steps.package.outputs.archive }}" "${{ steps.package.outputs.checksum }}" --repo "${{ github.repository }}" --title "AI Writing Assistant ${{ steps.version.outputs.tag }}" --generate-notes --verify-tag

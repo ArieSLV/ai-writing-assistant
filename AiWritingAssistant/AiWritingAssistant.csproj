@@ -6,10 +6,17 @@
         <Nullable>enable</Nullable>
         <UseWindowsForms>true</UseWindowsForms>
         <ImplicitUsings>enable</ImplicitUsings>
+        <Version>1.0.0</Version>
+        <Authors>Skuditsky Lev</Authors>
+        <Description>Windows tray utility for proofreading, translation, and Gemini-powered voice dictation.</Description>
+        <RepositoryUrl>https://github.com/ArieSLV/ai-writing-assistant</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>
+        <IncludeNativeLibrariesForSelfExtract Condition="'$(RuntimeIdentifier)' != ''">true</IncludeNativeLibrariesForSelfExtract>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="GlobalHotKey" Version="1.1.0" />
         <PackageReference Include="Microsoft.SemanticKernel" Version="1.73.0" />
         <PackageReference Include="Microsoft.SemanticKernel.Connectors.Google" Version="1.73.0-alpha" />
         <PackageReference Include="Microsoft.SemanticKernel.Connectors.Ollama" Version="1.73.0-alpha" />
